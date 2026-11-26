@@ -17,8 +17,9 @@ variable "vpc_cidr" {
 }
 
 variable "instance_type" {
-  type    = string
-  default = "t3.medium"
+  description = "EC2 instance type"
+  type        = string
+  default     = "t3.micro"
 }
 
 variable "min_size" {
