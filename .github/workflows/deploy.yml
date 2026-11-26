@@ -1,0 +1,87 @@
+name: CloudOps Portal - Terraform Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Choose Terraform operation"
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+
+      bootstrap:
+        description: "First deployment only: create infrastructure before uploading application"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-southeast-2
+  ARTIFACT_BUCKET: cloudops-portal-artifacts-706421610833
+
+jobs:
+  deploy:
+    name: Build and Deploy CloudOps
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build and Publish Application
+        run: dotnet publish -c Release -o ./publish
+
+      - name: Create Application ZIP
+        run: |
+          cd publish
+          zip -r ../CloudOpsPortal.zip .
+          cd ..
+
+      - name: Configure AWS Credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init
+
+      - name: Bootstrap Infrastructure
+        if: inputs.action == 'apply' && inputs.bootstrap == true
+        working-directory: terraform
+        run: |
+          terraform plan \
+            -var="min_size=0" \
+            -var="desired_capacity=0" \
+            -out=bootstrap.tfplan
+
+          terraform apply -auto-approve bootstrap.tfplan
+
+      - name: Upload Application to S3
+        run: |
+          aws s3 cp CloudOpsPortal.zip \
+            s3://${{ env.ARTIFACT_BUCKET }}/releases/CloudOpsPortal.zip
+
+            - name: Terraform Plan
+        working-directory: terraform
+        run: terraform plan
+
+      - name: Terraform Apply
+        if: inputs.action == 'apply'
+        working-directory: terraform
+        run: terraform apply -auto-approve
