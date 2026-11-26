@@ -1,3 +1,4 @@
+
 name: CloudOps Portal - Terraform Deployment
 
 on:
@@ -18,7 +19,6 @@ on:
         default: false
 
 permissions:
-  id-token: write
   contents: read
 
 env:
@@ -48,10 +48,11 @@ jobs:
           zip -r ../CloudOpsPortal.zip .
           cd ..
 
-      - name: Configure AWS Credentials using OIDC
+      - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Setup Terraform
@@ -73,15 +74,16 @@ jobs:
           terraform apply -auto-approve bootstrap.tfplan
 
       - name: Upload Application to S3
+        if: inputs.action == 'apply'
         run: |
           aws s3 cp CloudOpsPortal.zip \
             s3://${{ env.ARTIFACT_BUCKET }}/releases/CloudOpsPortal.zip
 
-            - name: Terraform Plan
+      - name: Terraform Plan
         working-directory: terraform
-        run: terraform plan
+        run: terraform plan -out=final.tfplan
 
       - name: Terraform Apply
         if: inputs.action == 'apply'
         working-directory: terraform
-        run: terraform apply -auto-approve
+        run: terraform apply -auto-approve final.tfplan
